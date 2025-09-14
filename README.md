@@ -4,6 +4,8 @@ Telegram bot for food diary. Log meals, build healthy habits.
 
 ## Features
 
+jhv,jhvvhj
+
 - 📝 Log meals and snacks throughout the day
 - 📊 View daily food entries
 - 📈 Track eating statistics
