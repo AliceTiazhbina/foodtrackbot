@@ -1,0 +1,27 @@
+{
+  "name": "foodtrackbot",
+  "version": "1.0.0",
+  "description": "🍎 Telegram bot for food diary. Log meals, build healthy habits",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "nodemon app.js"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "food",
+    "diary",
+    "health",
+    "tracking"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "node-telegram-bot-api": "^0.64.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
