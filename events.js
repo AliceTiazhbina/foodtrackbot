@@ -1,10 +1,30 @@
-const { bot, userData } = require("./app");
+const { bot, databaseService, User, FoodEntry } = require("./app");
 const { logFood, getTodayEntries, getStats } = require("./utils");
 
 // Start command
-bot.onText(/\/start/, (msg) => {
+bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
-  const welcomeMessage = `
+  const userId = msg.from.id;
+
+  try {
+    // Check if user exists in database
+    let user = await databaseService.getUser(userId);
+
+    if (!user) {
+      // Create new user
+      const userData = {
+        username: msg.from.username,
+        firstName: msg.from.first_name,
+        lastName: msg.from.last_name,
+        languageCode: msg.from.language_code,
+        isBot: msg.from.is_bot,
+      };
+
+      user = await databaseService.createUser(userId, userData);
+      console.log(`New user created: ${userId}`);
+    }
+
+    const welcomeMessage = `
 🍎 Welcome to FoodTrackBot!
 
 This bot will help you keep a food diary and build healthy habits.
@@ -12,21 +32,28 @@ This bot will help you keep a food diary and build healthy habits.
 Choose an action below:
   `;
 
-  const keyboard = {
-    inline_keyboard: [
-      [
-        { text: "📝 Log Meal", callback_data: "log_meal" },
-        { text: "📋 View Today", callback_data: "view_today" },
+    const keyboard = {
+      inline_keyboard: [
+        [
+          { text: "📝 Log Meal", callback_data: "log_meal" },
+          { text: "📋 View Today", callback_data: "view_today" },
+        ],
+        [
+          { text: "📊 Statistics", callback_data: "stats" },
+          { text: "⚙️ Settings", callback_data: "settings" },
+        ],
+        [{ text: "❓ Help", callback_data: "help" }],
       ],
-      [
-        { text: "📊 Statistics", callback_data: "stats" },
-        { text: "⚙️ Settings", callback_data: "settings" },
-      ],
-      [{ text: "❓ Help", callback_data: "help" }],
-    ],
-  };
+    };
 
-  bot.sendMessage(chatId, welcomeMessage, { reply_markup: keyboard });
+    bot.sendMessage(chatId, welcomeMessage, { reply_markup: keyboard });
+  } catch (error) {
+    console.error("Error in /start command:", error);
+    bot.sendMessage(
+      chatId,
+      "Sorry, there was an error. Please try again later."
+    );
+  }
 });
 
 // Help command
@@ -74,64 +101,99 @@ const showHelp = (chatId) => {
 };
 
 // Log command
-bot.onText(/\/log/, (msg) => {
+bot.onText(/\/log/, async (msg) => {
   const chatId = msg.chat.id;
+  const userId = msg.from.id;
   const text = msg.text.replace("/log", "").trim();
 
-  logFood(chatId, text, userData);
+  try {
+    await logFood(chatId, userId, text, databaseService);
+  } catch (error) {
+    console.error("Error in /log command:", error);
+    bot.sendMessage(
+      chatId,
+      "Sorry, there was an error logging your food. Please try again."
+    );
+  }
 });
 
 // View command
-bot.onText(/\/view/, (msg) => {
+bot.onText(/\/view/, async (msg) => {
   const chatId = msg.chat.id;
-  getTodayEntries(chatId, userData);
+  const userId = msg.from.id;
+
+  try {
+    await getTodayEntries(chatId, userId, databaseService);
+  } catch (error) {
+    console.error("Error in /view command:", error);
+    bot.sendMessage(
+      chatId,
+      "Sorry, there was an error retrieving your entries. Please try again."
+    );
+  }
 });
 
 // Stats command
-bot.onText(/\/stats/, (msg) => {
+bot.onText(/\/stats/, async (msg) => {
   const chatId = msg.chat.id;
-  getStats(chatId, userData);
+  const userId = msg.from.id;
+
+  try {
+    await getStats(chatId, userId, databaseService);
+  } catch (error) {
+    console.error("Error in /stats command:", error);
+    bot.sendMessage(
+      chatId,
+      "Sorry, there was an error retrieving your statistics. Please try again."
+    );
+  }
 });
 
 // Callback query handler for inline buttons
-bot.on("callback_query", (callbackQuery) => {
+bot.on("callback_query", async (callbackQuery) => {
   const message = callbackQuery.message;
   const chatId = message.chat.id;
+  const userId = callbackQuery.from.id;
   const data = callbackQuery.data;
 
   // Answer the callback query to remove loading state
   bot.answerCallbackQuery(callbackQuery.id);
 
-  switch (data) {
-    case "log_meal":
-      bot.sendMessage(
-        chatId,
-        '🍽️ Please describe what you ate:\n\nExample: "breakfast oatmeal with fruits"'
-      );
-      break;
+  try {
+    switch (data) {
+      case "log_meal":
+        bot.sendMessage(
+          chatId,
+          '🍽️ Please describe what you ate:\n\nExample: "breakfast oatmeal with fruits"'
+        );
+        break;
 
-    case "view_today":
-      getTodayEntries(chatId, userData);
-      break;
+      case "view_today":
+        await getTodayEntries(chatId, userId, databaseService);
+        break;
 
-    case "stats":
-      getStats(chatId, userData);
-      break;
+      case "stats":
+        await getStats(chatId, userId, databaseService);
+        break;
 
-    case "settings":
-      showSettings(chatId);
-      break;
+      case "settings":
+        showSettings(chatId);
+        break;
 
-    case "help":
-      showHelp(chatId);
-      break;
+      case "help":
+        showHelp(chatId);
+        break;
 
-    case "main_menu":
-      showMainMenu(chatId);
-      break;
+      case "main_menu":
+        showMainMenu(chatId);
+        break;
 
-    default:
-      bot.sendMessage(chatId, "Unknown command. Please try again.");
+      default:
+        bot.sendMessage(chatId, "Unknown command. Please try again.");
+    }
+  } catch (error) {
+    console.error("Error in callback query:", error);
+    bot.sendMessage(chatId, "Sorry, there was an error. Please try again.");
   }
 });
 
@@ -182,8 +244,9 @@ All settings are currently default.
 };
 
 // Handle regular text messages (treat as food log)
-bot.on("message", (msg) => {
+bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
+  const userId = msg.from.id;
   const text = msg.text;
 
   // Skip if it's a command
@@ -200,8 +263,16 @@ bot.on("message", (msg) => {
     return;
   }
 
-  // Treat as food log entry
-  logFood(chatId, text, userData, true);
+  try {
+    // Treat as food log entry
+    await logFood(chatId, userId, text, databaseService, true);
+  } catch (error) {
+    console.error("Error logging food from message:", error);
+    bot.sendMessage(
+      chatId,
+      "Sorry, there was an error logging your food. Please try again."
+    );
+  }
 });
 
 // Error handling
